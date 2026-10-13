@@ -48,6 +48,13 @@ def construir_parser() -> argparse.ArgumentParser:
     st.add_argument("--dias", type=int, default=7)
 
     sub.add_parser("doctor", help="estado da instalação")
+
+    ins = sub.add_parser("instalar", help="registra os hooks no settings.json do Claude Code")
+    ins.add_argument("--escopo", default=None, help="pasta onde o hook age (padrão: qualquer pasta)")
+    ins.add_argument("--aplicar", action="store_true", help="escreve de verdade; sem isso só mostra o plano")
+
+    des = sub.add_parser("desinstalar", help="remove os hooks do settings.json")
+    des.add_argument("--aplicar", action="store_true", help="escreve de verdade; sem isso nada muda")
     return parser
 
 
@@ -154,6 +161,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.comando == "doctor":
         return cmd_doctor()
+    if args.comando in ("instalar", "desinstalar"):
+        from cakto_downshift import instalar as mod_instalar
+        exe = Path(sys.argv[0]).resolve() if Path(sys.argv[0]).name == "cakto-downshift" else Path(sys.executable).with_name("cakto-downshift")
+        if args.comando == "instalar":
+            escopo = Path(args.escopo).resolve() if args.escopo else None
+            if escopo and not escopo.is_dir():
+                print(f"pasta do --escopo não existe: {escopo}", file=sys.stderr)
+                return 2
+            if not args.aplicar:
+                print(mod_instalar.plano(settings_path(), home(), escopo, exe))
+                return 0
+            print("\n".join(mod_instalar.aplicar(settings_path(), home(), escopo, exe)))
+            return 0
+        if not args.aplicar:
+            print("sem --aplicar nada muda; os hooks atuais estão em", settings_path())
+            return 0
+        print("\n".join(mod_instalar.desinstalar(settings_path())))
+        return 0
     parser.print_help()
     return 2
 

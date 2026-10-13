@@ -147,7 +147,8 @@ def main(argv: list[str] | None = None) -> int:
         return int(e.code or 0)
     if args.comando == "hook":
         from cakto_downshift.hooks.claude_code import executar
-        return executar(args.nome, sys.stdin.buffer, sys.stdout, os.environ)
+        entrada = getattr(sys.stdin, "buffer", None) if sys.stdin is not None else None
+        return executar(args.nome, entrada, sys.stdout, os.environ)
     if args.comando == "try":
         return cmd_try(args)
     if args.comando == "economia":

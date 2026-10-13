@@ -1,5 +1,6 @@
 """Resumo da telemetria. Economia só aparece quando um uso está ligado a uma decisão; o resto é
-contagem. A ligação é por ordem dentro da sessão, e o resumo diz quantas foram assim."""
+contagem. A ligação é por agente quando o `resultado` trouxe o agentId, senão por ordem dentro
+da sessão, e o resumo diz quantas foram de cada jeito."""
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -27,19 +28,53 @@ def _chave(valor) -> str:
     return valor if isinstance(valor, str) else "desconhecido"
 
 
+def _dedupe_usos(eventos: list[dict]) -> list[dict]:
+    """O SubagentStop pode disparar mais de uma vez pro mesmo filho (o agente para, é retomado e
+    para de novo), e o transcript é cumulativo: vale o último uso de cada agente na sessão."""
+    ultimo: dict[tuple, dict] = {}
+    saida = []
+    for ev in eventos:
+        if ev.get("tipo") == "uso" and isinstance(ev.get("agent_id"), str) and ev.get("sessao") is not None:
+            chave = (ev["sessao"], ev["agent_id"])
+            if chave in ultimo:
+                saida.remove(ultimo[chave])
+            ultimo[chave] = ev
+        saida.append(ev)
+    return saida
+
+
 def ligar(eventos: list[dict]) -> list[dict]:
-    ordenados = sorted(eventos, key=lambda e: str(e.get("ts") or ""))
+    ordenados = _dedupe_usos(sorted(eventos, key=lambda e: str(e.get("ts") or "")))
     livres: dict[str, list[dict]] = defaultdict(list)
+    por_tool: dict[tuple, dict] = {}
+    por_agente: dict[tuple, dict] = {}
     for ev in ordenados:
         tempo = _dt(ev)
         if ev.get("tipo") == "decisao":
             if tempo is not None and ev.get("sessao") is not None:
                 livres[ev["sessao"]].append(ev)
+                if isinstance(ev.get("tool_use_id"), str):
+                    por_tool[(ev["sessao"], ev["tool_use_id"])] = ev
+        elif ev.get("tipo") == "resultado":
+            if ev.get("sessao") is not None and isinstance(ev.get("agent_id"), str) and isinstance(ev.get("tool_use_id"), str):
+                d = por_tool.get((ev["sessao"], ev["tool_use_id"]))
+                if d is not None:
+                    por_agente[(ev["sessao"], ev["agent_id"])] = d
         elif ev.get("tipo") == "uso":
             ev["ligacao"], ev["decisao"] = None, None
             if tempo is None or ev.get("sessao") is None:
                 continue
+            # Uso sem modelo é transcript ausente ou vazio: ligar a uma decisão gastaria a decisão
+            # com custo zero e faria a economia parecer total.
+            if not isinstance(ev.get("modelo"), str):
+                continue
             candidatos = livres.get(ev["sessao"], [])
+            # Caminho determinístico: uso.agent_id → resultado.agent_id → resultado.tool_use_id → decisão.
+            d = por_agente.get((ev["sessao"], ev["agent_id"])) if isinstance(ev.get("agent_id"), str) else None
+            if d is not None and d in candidatos:
+                ev["ligacao"], ev["decisao"] = "agente", d
+                candidatos.remove(d)
+                continue
             # A decisão mais recente da sessão ainda sem uso: com filhos em paralelo pode trocar as pontas.
             for d in reversed(candidatos):
                 if tempo - _dt(d) <= JANELA_LIGACAO:
@@ -73,6 +108,8 @@ def resumo(eventos: list[dict]) -> dict:
         custo_tier[_chave(u.get("modelo"))] += custo
         custo_sessao[u.get("sessao") or "?"] += custo
     ligados = [u for u in usos if u["ligacao"]]
+    por_ligacao = Counter(u["ligacao"] for u in ligados)
+    sem_transcript = Counter(_chave(u.get("transcript")) for u in usos if not isinstance(u.get("modelo"), str))
     economia = None
     for u in ligados:
         d = u["decisao"]
@@ -86,7 +123,8 @@ def resumo(eventos: list[dict]) -> dict:
         "por_tier": dict(Counter(_chave(d.get("tier")) for d in decisoes)),
         "escritas": len(escritas), "confirmadas": confirmadas,
         "seguradas_por_motivo": dict(seguradas),
-        "usos": len(usos), "usos_ligados": len(ligados),
+        "usos": len(usos), "usos_ligados": len(ligados), "usos_por_ligacao": dict(por_ligacao),
+        "usos_sem_modelo": dict(sem_transcript),
         "custo_por_tier": dict(custo_tier),
         "custo_por_sessao": {"sessoes": len(custo_sessao), "maximo": max(custo_sessao.values(), default=0.0),
                              "media": (sum(custo_sessao.values()) / len(custo_sessao)) if custo_sessao else 0.0},
@@ -99,7 +137,8 @@ def formatar(r: dict, dias: int) -> str:
     linhas = [f"Últimos {dias} dias", f"decisões: {r['decisoes']}  por classe: {r['por_classe']}  por tier: {r['por_tier']}",
               f"reescritas: {r['escritas']} (confirmadas pelo Claude Code: {r['confirmadas']})",
               f"seguradas por motivo: {r['seguradas_por_motivo'] or 'nenhuma'}",
-              f"usos gravados: {r['usos']}, ligados a uma decisão: {r['usos_ligados']} (ligação por ordem na sessão)",
+              f"usos gravados: {r['usos']}, ligados a uma decisão: {r['usos_ligados']} (por agente: {r['usos_por_ligacao'].get('agente', 0)}, por ordem: {r['usos_por_ligacao'].get('ordem', 0)})",
+              f"usos sem modelo (transcript do filho): {r['usos_sem_modelo'] or 'nenhum'}",
               f"custo real por tier (USD): {{{', '.join(f'{k}: {v:.4f}' for k, v in r['custo_por_tier'].items())}}}",
               f"custo por sessão: {r['custo_por_sessao']['sessoes']} sessões, média {r['custo_por_sessao']['media']:.4f}, máximo {r['custo_por_sessao']['maximo']:.4f}"]
     if r["sem_dado"]:

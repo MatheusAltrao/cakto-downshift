@@ -31,18 +31,34 @@ def test_subagent_stop_grava_uso_com_custo(home, tmp_path):
 def test_subagent_stop_sem_transcript_grava_zeros(home):
     subagent_stop({"session_id": "s", "agent_id": "a1", "cwd": "/tmp/p"}, home, {})
     ev = ler(home)[-1]
-    assert ev["tipo"] == "uso" and ev["entrada"] == 0 and ev["modelo"] is None
+    assert ev["tipo"] == "uso" and ev["entrada"] == 0 and ev["modelo"] is None and ev["transcript"] == "sem_caminho"
+
+
+def test_subagent_stop_diz_por_que_o_uso_veio_zerado(home, tmp_path):
+    # Filho interno do Claude Code chega com caminho que não existe; arquivo sem resposta é "vazio".
+    subagent_stop({"session_id": "s", "agent_id": "a1", "agent_transcript_path": str(tmp_path / "nao.jsonl"), "cwd": "/tmp/p"}, home, {})
+    assert ler(home)[-1]["transcript"] == "ausente"
+    vazio = tmp_path / "v.jsonl"
+    vazio.write_text(json.dumps({"type": "user", "message": {"content": "x"}}) + "\n")
+    subagent_stop({"session_id": "s", "agent_id": "a2", "agent_transcript_path": str(vazio), "cwd": "/tmp/p"}, home, {})
+    assert ler(home)[-1]["transcript"] == "vazio" and ler(home)[-1]["modelo"] is None
 
 
 def test_post_tool_use_grava_resultado(home):
-    base = {"session_id": "s", "tool_use_id": "t1", "cwd": "/tmp/p", "tool_name": "Task", "tool_response": {"model": "claude-haiku-5-5"}}
+    # Formato real do Claude Code 2.1.x: o modelo vem em resolvedModel, e agentId casa com o SubagentStop.
+    real = {"agentId": "ag1", "resolvedModel": "claude-haiku-5-5", "status": "completed", "description": "x", "prompt": "..."}
+    base = {"session_id": "s", "tool_use_id": "t1", "cwd": "/tmp/p", "tool_name": "Task", "tool_response": real}
     assert post_tool_use({**base, "hook_event_name": "PostToolUse"}, home, {}) == {}
     assert post_tool_use({**base, "hook_event_name": "PostToolUseFailure", "tool_response": "erro"}, home, {}) == {}
+    assert post_tool_use({**base, "hook_event_name": "PostToolUse", "tool_response": {**real, "status": "async_launched"}}, home, {}) == {}
+    assert post_tool_use({**base, "hook_event_name": "PostToolUse", "tool_response": {"model": "claude-sonnet-5-5"}}, home, {}) == {}
     evs = [e for e in ler(home) if e["tipo"] == "resultado"]
-    assert evs[0]["modelo_reportado"] == "haiku" and evs[0]["status"] == "concluido"
-    assert evs[1]["modelo_reportado"] is None and evs[1]["status"] == "erro"
+    assert evs[0]["modelo_reportado"] == "haiku" and evs[0]["status"] == "concluido" and evs[0]["agent_id"] == "ag1"
+    assert evs[1]["modelo_reportado"] is None and evs[1]["status"] == "erro" and evs[1]["agent_id"] is None
+    assert evs[2]["status"] == "em_andamento"
+    assert evs[3]["modelo_reportado"] == "sonnet" and evs[3]["status"] == "desconhecido"
     post_tool_use({**base, "tool_name": "Bash"}, home, {})
-    assert len([e for e in ler(home) if e["tipo"] == "resultado"]) == 2
+    assert len([e for e in ler(home) if e["tipo"] == "resultado"]) == 4
 
 
 def test_subagent_stop_tolera_tipos_errados(home, tmp_path):

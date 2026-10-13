@@ -74,9 +74,11 @@ Risco é piso: a tarefa vai para Sonnet no mínimo e nunca desce para Haiku.
 
 Fica em `~/.cakto-downshift/eventos.jsonl` (pasta `0700`, arquivo `0600`), local, sem rede.
 
-- **Grava:** quatro tipos de evento, `decisao` (classe, confiança, risco, perfil, modelo atual e
-  escrito, códigos de motivo, milissegundos), `resultado` (modelo que o Claude Code reportou e como o
-  filho terminou), `uso` (tokens de entrada, saída e cache do filho, custo pelo catálogo) e `falha`.
+- **Grava:** cinco tipos de evento, `decisao` (classe, confiança, risco, perfil, modelo atual e
+  escrito, códigos de motivo, milissegundos), `resultado` (modelo que o Claude Code reportou em
+  `resolvedModel`, o `agentId` do filho e como ele terminou), `uso` (tokens de entrada, saída e cache
+  do filho, custo pelo catálogo, e o campo `transcript`: `ok`, `vazio`, `ausente` ou `sem_caminho`,
+  que diz por que um uso veio zerado), `sessao` (orçamento informado no `SessionStart`) e `falha`.
   A sessão vai como hash SHA-256 truncado e o projeto como o nome da pasta.
 - **Nunca grava:** o texto do prompt, o caminho completo, o `session_id` cru, nem conteúdo do transcript.
 
@@ -97,9 +99,13 @@ de afirmar economia.
 - **Agente nomeado fica fora do roteador por padrão**, exceto quando a chamada traz `model`. Quem
   quiser roteá-los define `CAKTO_DOWNSHIFT_ROTEAR_NOMEADOS=1`. O ganho nos nomeados vem do `model:` no
   frontmatter: veja `docs/agentes.md`.
-- **Ligação de custo por ordem.** O `SubagentStop` não traz o id da chamada; o custo é casado com a
-  decisão mais recente da mesma sessão sem uso (até 2 horas). Com filhos em paralelo as pontas podem
-  trocar, e o `stats` marca essas ligações como `ordem`.
+- **Ligação de custo.** O `SubagentStop` não traz o id da chamada, mas o `PostToolUse` traz o
+  `agentId` do filho: quando o `resultado` chegou, o custo liga à decisão por agente (`agente`).
+  Sem ele, o custo é casado com a decisão mais recente da mesma sessão sem uso (até 2 horas), e com
+  filhos em paralelo as pontas podem trocar; o `stats` marca essas como `ordem`. Uso sem modelo
+  (transcript ausente ou vazio, caso dos filhos internos do Claude Code) nunca liga.
+- **`SubagentStop` repetido.** O mesmo filho pode parar mais de uma vez (quando é retomado); o
+  transcript é cumulativo, então o `stats` conta só o último uso de cada agente na sessão.
 - **Só os primeiros 16 KiB** do texto da tarefa são classificados.
 - Só Claude Code; fail-open: qualquer falha do hook responde `{}` com exit 0 e grava um evento `falha`.
 

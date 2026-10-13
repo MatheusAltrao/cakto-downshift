@@ -69,3 +69,23 @@ def test_stdout_fechado_nao_derruba_o_hook(home):
     proc.stderr.close()
     assert proc.wait(timeout=10) == 0
     assert b"Traceback" not in err
+
+
+def test_stdout_sem_utf8_ainda_entrega_a_reescrita(home):
+    # O prompt ecoado tem acento e seta; com stdout em ASCII o write não pode perder a resposta.
+    p = {"session_id": "s", "cwd": "/tmp/p", "tool_input": {"prompt": "renomeie a variável userId → customerId", "model": "claude-opus-5-5"}}
+    r = subprocess.run(
+        [sys.executable, "-m", "cakto_downshift.cli", "hook", "pre-tool-use"],
+        input=json.dumps(p).encode(), capture_output=True, timeout=10,
+        env={"CAKTO_DOWNSHIFT_HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONIOENCODING": "ascii"},
+    )
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["hookSpecificOutput"]["updatedInput"]["model"] == "haiku"
+
+
+def test_stdin_fechado_no_arranque_e_fail_open(home):
+    r = subprocess.run(
+        ["/bin/sh", "-c", f'"{sys.executable}" -m cakto_downshift.cli hook pre-tool-use <&-'],
+        capture_output=True, timeout=10, env={"CAKTO_DOWNSHIFT_HOME": str(home), "PATH": "/usr/bin:/bin"},
+    )
+    assert r.returncode == 0 and json.loads(r.stdout) == {} and b"Traceback" not in r.stderr

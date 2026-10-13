@@ -94,3 +94,13 @@ def test_json_invalido_da_rc1_sem_tocar_em_nada(home, tmp_path, monkeypatch, cap
     assert s.read_bytes() == b'{"model":"opus",}'
     assert not list(tmp_path.glob("settings.json.bak-*"))
     assert not perfil_path(home).exists()
+
+
+def test_hooks_malformado_no_settings_nao_derruba_nem_apaga():
+    import pytest
+    s = {"hooks": {"Stop": [{"hooks": ["x", {"command": 5}]}], "Notification": "abc"}}
+    m = mesclar(s, EXE)
+    assert m["hooks"]["Stop"] == [{"hooks": ["x", {"command": 5}]}] and m["hooks"]["Notification"] == "abc"
+    assert remover(m)["hooks"] == s["hooks"]
+    with pytest.raises(ValueError, match="não é uma lista"):
+        mesclar({"hooks": {"PreToolUse": "abc"}}, EXE)

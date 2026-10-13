@@ -27,7 +27,10 @@ def e_nosso(comando: str) -> bool:
     return "cakto-downshift" in comando and " hook " in comando
 
 
-def _sem_os_nossos(grupos: list) -> list:
+def _sem_os_nossos(grupos) -> list:
+    if not isinstance(grupos, list):
+        # Evento com valor que não é lista: não é nosso e não dá pra percorrer; fica como está.
+        return grupos
     saida = []
     for g in grupos:
         lista = g.get("hooks") if isinstance(g, dict) else None
@@ -35,7 +38,7 @@ def _sem_os_nossos(grupos: list) -> list:
             # Grupo sem lista de hooks não é nosso: apagar seria mexer no que não pedimos.
             saida.append(g)
             continue
-        hooks = [h for h in lista if not e_nosso(h.get("command", ""))]
+        hooks = [h for h in lista if not (isinstance(h, dict) and isinstance(h.get("command"), str) and e_nosso(h["command"]))]
         if hooks:
             saida.append({**g, "hooks": hooks})
     return saida
@@ -44,7 +47,7 @@ def _sem_os_nossos(grupos: list) -> list:
 def remover(settings: dict) -> dict:
     novo = json.loads(json.dumps(settings))
     hooks = {ev: _sem_os_nossos(gs) for ev, gs in (novo.get("hooks") or {}).items()}
-    novo["hooks"] = {ev: gs for ev, gs in hooks.items() if gs}
+    novo["hooks"] = {ev: gs for ev, gs in hooks.items() if gs or not isinstance(gs, list)}
     return novo
 
 
@@ -54,7 +57,11 @@ def mesclar(settings: dict, executavel: Path) -> dict:
         grupo = {"hooks": [{"type": "command", "command": comando_hook(executavel, nome), "timeout": 10}]}
         if matcher:
             grupo = {"matcher": matcher, **grupo}
-        novo["hooks"].setdefault(evento, []).append(grupo)
+        grupos = novo["hooks"].setdefault(evento, [])
+        if not isinstance(grupos, list):
+            # Não dá pra anexar num valor que não é lista, e sobrescrever seria apagar o que é do dono.
+            raise ValueError(f"hooks.{evento} no settings não é uma lista; nada foi alterado")
+        grupos.append(grupo)
     return novo
 
 
@@ -119,10 +126,17 @@ def plano(settings_path: Path, home: Path, escopo: Path | None, executavel: Path
     linhas = [f"settings: {settings_path}", f"escopo: {escopo or 'qualquer pasta'}",
               f"perfil: {'mantido' if mod_perfil.caminho(home).exists() else 'criado em medium'}", "hooks depois:"]
     for ev, gs in novo["hooks"].items():
+        if not isinstance(gs, list):
+            linhas.append(f"  {ev}: valor inesperado, mantido como está")
+            continue
         for g in gs:
-            for h in g["hooks"]:
-                marca = "novo" if e_nosso(h["command"]) else "mantido"
-                linhas.append(f"  {ev}: {h['command']} ({marca})")
+            for h in (g.get("hooks") if isinstance(g, dict) and isinstance(g.get("hooks"), list) else []):
+                comando = h.get("command") if isinstance(h, dict) else None
+                if not isinstance(comando, str):
+                    linhas.append(f"  {ev}: hook sem command, mantido")
+                    continue
+                marca = "novo" if e_nosso(comando) else "mantido"
+                linhas.append(f"  {ev}: {comando} ({marca})")
     linhas.append("Nada foi alterado. Rode de novo com --aplicar.")
     return "\n".join(linhas)
 

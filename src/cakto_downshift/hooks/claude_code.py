@@ -6,7 +6,7 @@ import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import IO
+from typing import IO, Optional
 
 from cakto_downshift import escopo as mod_escopo
 from cakto_downshift import perfil as mod_perfil
@@ -15,6 +15,10 @@ from cakto_downshift.catalogo import custo_usd, familia_de, por_familia
 from cakto_downshift.piso import carregar_do_projeto
 from cakto_downshift.politica import Entrada, decidir
 from cakto_downshift.transcript import modelo_da_sessao, modelo_do_transcript, uso_do_transcript
+
+# O status do tool_response do Task no Claude Code 2.1.x; o que não está aqui vira "desconhecido".
+_STATUS = {"completed": "concluido", "async_launched": "em_andamento", "cancelled": "interrompido",
+           "interrupted": "interrompido", "killed": "interrompido", "failed": "erro", "error": "erro"}
 
 MAX_BYTES = 1024 * 1024
 NOMES = ("pre-tool-use", "session-start", "subagent-stop", "post-tool-use")
@@ -109,13 +113,23 @@ def subagent_stop(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
     if not mod_escopo.dentro(raiz_do_projeto(payload, env), mod_escopo.carregar(home)):
         return {}
     caminho = payload.get("agent_transcript_path")
-    uso = uso_do_transcript(Path(caminho)) if isinstance(caminho, str) else None
-    familia = familia_de(modelo_do_transcript(Path(caminho))) if isinstance(caminho, str) else None
+    # Zero token tem três causas que o stats precisa separar: o Claude Code não mandou caminho, o
+    # arquivo não existe (filho interno sem transcript) ou existe e não tem resposta do assistente.
+    uso = familia = None
+    if not isinstance(caminho, str) or not caminho:
+        transcript = "sem_caminho"
+    elif not Path(caminho).is_file():
+        transcript = "ausente"
+    else:
+        uso = uso_do_transcript(Path(caminho))
+        familia = familia_de(modelo_do_transcript(Path(caminho)))
+        transcript = "ok" if familia else "vazio"
     modelo = por_familia(familia) if familia else None
     custo = custo_usd(modelo, uso.entrada, uso.saida, uso.cache_leitura, uso.cache_escrita) if (modelo and uso) else None
     telemetria.gravar(home, {
         "tipo": "uso", "sessao": telemetria.hash_sessao(payload.get("session_id")),
         "agent_id": payload["agent_id"] if isinstance(payload.get("agent_id"), str) else None, "modelo": familia,
+        "transcript": transcript,
         "entrada": uso.entrada if uso else 0, "saida": uso.saida if uso else 0,
         "cache_leitura": uso.cache_leitura if uso else 0, "cache_escrita": uso.cache_escrita if uso else 0,
         "custo_usd": round(custo, 6) if custo is not None else None,
@@ -128,13 +142,20 @@ def post_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
         return {}
     if not mod_escopo.dentro(raiz_do_projeto(payload, env), mod_escopo.carregar(home)):
         return {}
-    resposta = payload.get("tool_response")
-    reportado = familia_de(resposta.get("model")) if isinstance(resposta, dict) else None
+    resposta = payload.get("tool_response") if isinstance(payload.get("tool_response"), dict) else {}
+    # O tool_response do Task não repete o tool_input: o modelo que o filho usou vem em resolvedModel.
+    reportado = familia_de(resposta.get("resolvedModel") if isinstance(resposta.get("resolvedModel"), str) else resposta.get("model"))
+    if payload.get("hook_event_name") == "PostToolUseFailure":
+        status = "erro"
+    else:
+        status = _STATUS.get(resposta.get("status"), "desconhecido") if isinstance(resposta.get("status"), str) else "desconhecido"
     telemetria.gravar(home, {
         "tipo": "resultado", "sessao": telemetria.hash_sessao(payload.get("session_id")),
         "tool_use_id": payload["tool_use_id"] if isinstance(payload.get("tool_use_id"), str) else None,
+        # agentId é o mesmo agent_id do SubagentStop: liga o uso à decisão sem adivinhar por ordem.
+        "agent_id": resposta["agentId"] if isinstance(resposta.get("agentId"), str) else None,
         "modelo_reportado": reportado,
-        "status": "erro" if payload.get("hook_event_name") == "PostToolUseFailure" else "concluido",
+        "status": status,
     })
     return {}
 
@@ -143,13 +164,14 @@ _HOOKS = {"pre-tool-use": pre_tool_use, "session-start": session_start,
           "subagent-stop": subagent_stop, "post-tool-use": post_tool_use}
 
 
-def executar(nome: str, entrada: IO[bytes], saida: IO[str], env: Mapping[str, str]) -> int:
+def executar(nome: str, entrada: Optional[IO[bytes]], saida: Optional[IO[str]], env: Mapping[str, str]) -> int:
     """Sempre exit 0 e sempre JSON na saída: um erro nosso nunca pode virar um spawn bloqueado."""
     home: Path | None = None
     resposta: dict = {}
     try:
         home = home_de(env)
-        bruto = entrada.read(MAX_BYTES + 1)
+        # fd 0 fechado no arranque deixa sys.stdin None; vale como payload vazio, não como traceback.
+        bruto = entrada.read(MAX_BYTES + 1) if entrada is not None else b""
         if len(bruto) > MAX_BYTES:
             raise ValueError("PAYLOAD_GRANDE")
         payload = json.loads(bruto)
@@ -164,8 +186,12 @@ def executar(nome: str, entrada: IO[bytes], saida: IO[str], env: Mapping[str, st
         if home is not None:
             telemetria.gravar(home, {"tipo": "falha", "hook": nome, "codigo": codigo})
         resposta = {}
+    if saida is None:
+        return 0
     try:
-        saida.write(json.dumps(resposta, ensure_ascii=False) + "\n")
+        # ensure_ascii: a resposta ecoa o prompt, e um stdout fora de UTF-8 ou um lone surrogate
+        # derrubaria o write e perderia a reescrita em silêncio. Escape JSON é equivalente pro leitor.
+        saida.write(json.dumps(resposta, ensure_ascii=True) + "\n")
         saida.flush()
     except (OSError, ValueError):
         # Pipe fechado: sem desviar o fd 1, o flush do shutdown do interpretador falha de novo (exit 120).

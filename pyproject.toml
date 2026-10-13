@@ -18,5 +18,8 @@ cakto-downshift = "cakto_downshift.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+cakto_downshift = ["pisos/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

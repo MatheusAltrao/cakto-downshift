@@ -64,7 +64,7 @@ def test_piso_do_repo_e_aplicado(home, tmp_path):
     (tmp_path / "cakto-downshift.json").write_text('{"versao": 1, "minimo_por_risco": {"dinheiro": "opus"}}')
     r = pre_tool_use(payload("formate a data do relatório de chargeback", modelo="sonnet", cwd=str(tmp_path)), home, {})
     assert r["hookSpecificOutput"]["updatedInput"]["model"] == "opus"
-    assert ler(home)[-1]["piso_repo"] is True
+    assert ler(home)[-1]["piso_projeto"] is True
 
 
 @pytest.mark.parametrize("p", [{}, {"tool_input": {}}, {"tool_input": {"prompt": ""}}, {"tool_input": "nao e dict"}])
@@ -90,3 +90,16 @@ def test_session_id_nao_string_nao_impede_a_decisao(home):
 def test_agente_nomeado_com_modelo_na_chamada_e_roteado(home):
     r = pre_tool_use(payload("renomeie a variável userId", agente="backend"), home, {})
     assert r["hookSpecificOutput"]["updatedInput"]["model"] == "haiku"
+
+
+def test_piso_da_maquina_sobe_o_tier_no_hook(home, tmp_path):
+    from cakto_downshift.hooks.claude_code import pre_tool_use
+    from cakto_downshift.piso import salvar_maquina
+    from cakto_downshift.telemetria import ler
+    salvar_maquina(home, {"versao": 1, "por_projeto": {"cakto-backend": {"minimo_por_risco": {"dinheiro": "opus"}}}})
+    raiz = tmp_path / "cakto-backend"
+    raiz.mkdir()
+    p = {"session_id": "s", "cwd": str(raiz), "tool_input": {"prompt": "formate o relatório de chargeback", "model": "claude-opus-5-5"}}
+    assert pre_tool_use(p, home, {}) == {}
+    ev = ler(home)[-1]
+    assert ev["tier"] == "opus" and ev["piso_projeto"] is True and "PISO_PROJETO" in ev["motivos"]

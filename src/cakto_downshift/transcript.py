@@ -19,12 +19,17 @@ def _linhas_assistant(caminho: Path, so_cauda: bool):
     except OSError:
         return
     # errors="replace": o corte da cauda pode partir uma sequência UTF-8 no meio.
-    for linha in bruto.decode("utf-8", errors="replace").splitlines():
+    # split("\n") e não splitlines(): splitlines também quebra em U+2028 e \x0b, que podem
+    # aparecer crus dentro de string JSON e partiriam uma linha válida em pedaços inválidos.
+    for linha in bruto.decode("utf-8", errors="replace").split("\n"):
         if '"assistant"' not in linha:
             continue
         try:
             obj = json.loads(linha)
         except ValueError:
+            continue
+        # Linha JSON que não é objeto (lista, string) passa pelo filtro acima e não tem .get.
+        if not isinstance(obj, dict):
             continue
         if obj.get("type") == "assistant" and isinstance(obj.get("message"), dict):
             yield obj["message"]
@@ -49,14 +54,27 @@ class Uso:
     cache_escrita: int
 
 
+def _inteiro(valor) -> int:
+    # Contagem malformada (string, null, lista) conta como zero: uma linha ruim não pode
+    # abortar a soma do transcript inteiro.
+    if isinstance(valor, bool):
+        return 0
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return 0
+
+
 def uso_do_transcript(caminho: Path) -> Uso:
     e = s = cl = ce = 0
     for msg in _linhas_assistant(caminho, so_cauda=False):
-        u = msg.get("usage") or {}
-        e += int(u.get("input_tokens") or 0)
-        s += int(u.get("output_tokens") or 0)
-        cl += int(u.get("cache_read_input_tokens") or 0)
-        ce += int(u.get("cache_creation_input_tokens") or 0)
+        u = msg.get("usage")
+        if not isinstance(u, dict):
+            continue
+        e += _inteiro(u.get("input_tokens"))
+        s += _inteiro(u.get("output_tokens"))
+        cl += _inteiro(u.get("cache_read_input_tokens"))
+        ce += _inteiro(u.get("cache_creation_input_tokens"))
     return Uso(e, s, cl, ce)
 
 

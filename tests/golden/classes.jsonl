@@ -1,0 +1,23 @@
+{"texto": "renomeie a variável userId para customerId em src/checkout.ts", "classe": "mecanica", "confianca": true}
+{"texto": "rename the userId variable to customerId", "classe": "mecanica", "confianca": true}
+{"texto": "formate o arquivo com prettier", "classe": "mecanica", "confianca": true}
+{"texto": "corrija o typo no README", "classe": "mecanica", "confianca": true}
+{"texto": "liste os arquivos modificados na branch", "classe": "mecanica", "confianca": true}
+{"texto": "mova o componente Botao para a pasta ui", "classe": "mecanica", "confianca": true}
+{"texto": "remova os console.log que sobraram", "classe": "mecanica", "confianca": true}
+{"texto": "escreva uma função que valida um intervalo de datas", "classe": "simples", "confianca": true}
+{"texto": "write a unit test for the formatDate helper", "classe": "simples", "confianca": true}
+{"texto": "explique o que esse regex faz", "classe": "simples", "confianca": true}
+{"texto": "adicione um teste unitário para a função slugify", "classe": "simples", "confianca": true}
+{"texto": "implemente a exportação de CSV na tela de pedidos", "classe": "media", "confianca": true}
+{"texto": "corrija o bug em que o formulário perde o estado ao trocar de aba", "classe": "media", "confianca": true}
+{"texto": "refatore o módulo de notificações para usar o hook useNotificacoes", "classe": "media", "confianca": true}
+{"texto": "add a new endpoint that returns the order history with pagination", "classe": "media", "confianca": true}
+{"texto": "investigue por que o teste de integração falha só no CI", "classe": "media", "confianca": true}
+{"texto": "desenhe a arquitetura do novo serviço de notificações com fila e retentativa", "classe": "complexa", "confianca": true}
+{"texto": "faça a migração do banco de pedidos para o novo schema sem downtime", "classe": "complexa", "confianca": true}
+{"texto": "existe uma race condition entre o worker e o webhook; encontre a causa raiz", "classe": "complexa", "confianca": true}
+{"texto": "design a distributed cache invalidation strategy across the three services", "classe": "complexa", "confianca": true}
+{"texto": "revise a segurança do endpoint de upload", "classe": "complexa", "confianca": false}
+{"texto": "dê uma olhada no módulo de onboarding e me diga o que acha", "classe": "media", "confianca": false}
+{"texto": "veja o arquivo src/app.py", "classe": "media", "confianca": false}

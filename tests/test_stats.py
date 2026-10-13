@@ -44,3 +44,22 @@ def test_resumo_sem_dado():
     r = resumo([decisao(0)])
     assert r["sem_dado"] and r["economia_estimada_usd"] is None
     assert "não é fatura" in formatar(r, 7) and "sem dado" in formatar(r, 7)
+
+
+def test_telemetria_malformada_nao_derruba():
+    sem_ts = decisao(0)
+    del sem_ts["ts"]
+    ruim = uso(1)
+    ruim.update(entrada=None, custo_usd="x")
+    estranha = decisao(2, tool="t9", motivos=())
+    estranha.update(motivos=None, classe={"a": 1})
+    sem_sessao_d, sem_sessao_u = decisao(3), uso(4)
+    del sem_sessao_d["sessao"], sem_sessao_u["sessao"]
+    ingenuo = uso(5)
+    ingenuo["ts"] = "2026-10-12T12:05:00"
+    evs = [sem_ts, ruim, [1], "x", estranha, sem_sessao_d, sem_sessao_u, ingenuo, {"ts": "lixo", "tipo": "uso", "sessao": "s"}]
+    r = resumo(evs)
+    # ruim liga com estranha (única decisão datada da sessão); ingenuo (UTC) fica sem par.
+    assert r["usos"] == 3 and r["usos_ligados"] == 1
+    assert r["por_classe"].get("desconhecido") == 1
+    assert formatar(r, 7).endswith("não é fatura.")

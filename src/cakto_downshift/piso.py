@@ -40,12 +40,18 @@ def _tier(valor, onde: str) -> Tier:
     return FAMILIA_TIER[valor]
 
 
+def _objeto_ou_ausente(bruto: dict, campo: str, caminho: Path) -> bool:
+    valor = bruto.get(campo)
+    return valor is None or isinstance(valor, dict)
+
+
 def carregar(caminho: Path) -> Piso:
     if caminho.stat().st_size > MAX_BYTES:
         raise ValueError(f"{caminho}: maior que {MAX_BYTES} bytes")
     try:
         bruto = json.loads(caminho.read_text(encoding="utf-8"))
-    except ValueError as e:
+    except (ValueError, RecursionError) as e:
+        # Aninhamento profundo estoura a pilha do parser: é JSON inválido para este arquivo, não um erro do hook.
         raise ValueError(f"{caminho}: JSON inválido ({e})") from e
     if not isinstance(bruto, dict):
         raise ValueError(f"{caminho}: o conteúdo precisa ser um objeto")
@@ -55,6 +61,10 @@ def carregar(caminho: Path) -> Piso:
         raise ValueError(f"{caminho}: campos desconhecidos {sorted(desconhecidos)}")
     minimo = _tier(bruto["minimo"], f"{caminho}: minimo") if "minimo" in bruto else None
     por_classe, por_risco = {}, {}
+    if not _objeto_ou_ausente(bruto, "minimo_por_classe", caminho):
+        raise ValueError(f"{caminho}: minimo_por_classe precisa ser um objeto")
+    if not _objeto_ou_ausente(bruto, "minimo_por_risco", caminho):
+        raise ValueError(f"{caminho}: minimo_por_risco precisa ser um objeto")
     for nome, valor in (bruto.get("minimo_por_classe") or {}).items():
         try:
             classe = Classe[nome.upper()]

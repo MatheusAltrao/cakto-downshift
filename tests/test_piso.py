@@ -29,6 +29,9 @@ def test_encontrar_sobe_ate_oito_niveis_e_para(tmp_path):
     fundo.mkdir(parents=True)
     (raiz / NOME_ARQUIVO).write_text("{}")
     assert encontrar(fundo) == raiz / NOME_ARQUIVO
+    no_limite = raiz.joinpath(*["d"] * 8)
+    no_limite.mkdir(parents=True)
+    assert encontrar(no_limite) == raiz / NOME_ARQUIVO
     mais_fundo = raiz.joinpath(*["d"] * 9)
     mais_fundo.mkdir(parents=True)
     assert encontrar(mais_fundo) is None
@@ -44,6 +47,8 @@ def test_symlink_e_ignorado(tmp_path):
 @pytest.mark.parametrize("conteudo", [
     '{"versao": 2}', '{"versao": 1, "minimo": "turbo"}', '{"versao": 1, "minimo_por_classe": {"x": "opus"}}',
     '{"versao": 1, "minimo_por_risco": {"dinheiro": "gpt"}}', '{"versao": 1, "campo_desconhecido": 1}', "[]", "{",
+    '{"versao": 1, "minimo_por_classe": [1]}', '{"versao": 1, "minimo_por_risco": "x"}',
+    '{"versao": 1, "minimo_por_classe": []}', "[" * 60000,
 ])
 def test_invalido_lanca_valueerror_e_projeto_fail_open(tmp_path, conteudo):
     arq = tmp_path / NOME_ARQUIVO

@@ -59,7 +59,7 @@ def test_telemetria_malformada_nao_derruba():
     ingenuo["ts"] = "2026-10-12T12:05:00"
     evs = [sem_ts, ruim, [1], "x", estranha, sem_sessao_d, sem_sessao_u, ingenuo, {"ts": "lixo", "tipo": "uso", "sessao": "s"}]
     r = resumo(evs)
-    # ruim liga com estranha (única decisão datada da sessão); ingenuo (UTC) fica sem par.
-    assert r["usos"] == 3 and r["usos_ligados"] == 1
+    # só ingenuo (ts sem fuso, lido como UTC) liga, com estranha; os demais usos ficam sem par.
+    assert r["usos"] == 4 and r["usos_ligados"] == 1
     assert r["por_classe"].get("desconhecido") == 1
     assert formatar(r, 7).endswith("não é fatura.")

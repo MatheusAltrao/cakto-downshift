@@ -1,6 +1,6 @@
 """Da tarefa à decisão. Puro: nada aqui lê disco ou ambiente.
 
-Ordem: classe → risco (piso) → piso do repo → piso do perfil → guardas. Tudo que sobe tier vem
+Ordem: classe → risco (piso) → piso de projeto (máquina ou repo) → piso do perfil → guardas. Tudo que sobe tier vem
 antes das guardas, e as guardas valem em qualquer perfil.
 """
 from dataclasses import dataclass
@@ -38,7 +38,7 @@ class Decisao:
     familia_escrita: str | None
     motivos: tuple[str, ...]
     piso_perfil: bool
-    piso_repo: bool
+    piso_projeto: bool
     sem_sinal: bool
 
 
@@ -58,23 +58,23 @@ def decidir(e: Entrada) -> Decisao:
             tier = Tier.SONNET
             motivos.append("PISO_RISCO")
 
-    piso_repo = False
+    piso_projeto = False
     if e.piso is not None:
         minimo = tier_minimo(e.piso, cls.classe, riscos)
         if minimo is not None and minimo > tier:
-            tier, piso_repo = minimo, True
-            motivos.append("PISO_REPO")
+            tier, piso_projeto = minimo, True
+            motivos.append("PISO_PROJETO")
 
     piso_perfil = False
     if e.perfil.economia == Economia.LOW and tier == Tier.HAIKU:
         tier, piso_perfil = Tier.SONNET, True
         motivos.append("PISO_PERFIL")
 
-    escrita, tier = _guardas(e, cls.classe, confianca, riscos, tier, piso_repo, motivos)
-    return Decisao(cls.classe, confianca, riscos, tier, e.familia_atual, escrita, tuple(motivos), piso_perfil, piso_repo, cls.sem_sinal)
+    escrita, tier = _guardas(e, cls.classe, confianca, riscos, tier, piso_projeto, motivos)
+    return Decisao(cls.classe, confianca, riscos, tier, e.familia_atual, escrita, tuple(motivos), piso_perfil, piso_projeto, cls.sem_sinal)
 
 
-def _guardas(e: Entrada, classe: Classe, confianca: bool, riscos, tier: Tier, piso_repo: bool, motivos: list[str]) -> tuple[str | None, Tier]:
+def _guardas(e: Entrada, classe: Classe, confianca: bool, riscos, tier: Tier, piso_projeto: bool, motivos: list[str]) -> tuple[str | None, Tier]:
     """Devolve (família a escrever ou None, tier efetivo). Cada None vem com o motivo.
 
     O tier efetivo difere do pedido só no degrau PERFIL_HIGH; devolvê-lo mantém a telemetria por tier fiel ao que foi escrito.
@@ -103,7 +103,7 @@ def _guardas(e: Entrada, classe: Classe, confianca: bool, riscos, tier: Tier, pi
             else:
                 motivos.append("GUARDA_SEM_CONFIANCA")
                 return None, tier
-    elif not (confianca or piso_repo or riscos):
+    elif not (confianca or piso_projeto or riscos):
         motivos.append("GUARDA_SEM_CONFIANCA")
         return None, tier
     familia = TIER_FAMILIA[tier]

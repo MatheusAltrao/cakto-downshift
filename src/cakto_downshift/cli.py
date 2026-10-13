@@ -9,7 +9,8 @@ from cakto_downshift import __version__
 from cakto_downshift import escopo as mod_escopo
 from cakto_downshift import perfil as mod_perfil
 from cakto_downshift.catalogo import familia_de
-from cakto_downshift.piso import carregar_do_projeto
+from cakto_downshift import piso as mod_piso
+from cakto_downshift.piso import carregar_da_maquina, carregar_do_projeto, combinar
 from cakto_downshift.politica import Entrada, decidir
 
 TEXTO_ECONOMIA = """\
@@ -44,6 +45,19 @@ def construir_parser() -> argparse.ArgumentParser:
                        formatter_class=argparse.RawDescriptionHelpFormatter)
     e.add_argument("args", nargs="*")
 
+    pi = sub.add_parser("piso", help="tier mínimo desta máquina (global ou por projeto)",
+                        epilog="""\
+cakto-downshift piso                         mostra o piso da máquina e os templates
+cakto-downshift piso front                   grava o template front como piso global
+cakto-downshift piso pagamentos --projeto cakto-backend
+                                             grava o template só para a pasta cakto-backend
+cakto-downshift piso ./meu.json [--projeto X]
+                                             grava um JSON seu (mesmo formato dos templates)
+cakto-downshift piso remover [--projeto X]   apaga o piso global ou o de um projeto""",
+                        formatter_class=argparse.RawDescriptionHelpFormatter)
+    pi.add_argument("fonte", nargs="?", default=None, help="nome de template, caminho de JSON ou 'remover'")
+    pi.add_argument("--projeto", default=None, help="nome da pasta do repositório; sem ele, vale para todos")
+
     st = sub.add_parser("stats", help="decisões, usos e economia estimada")
     st.add_argument("--dias", type=int, default=7)
 
@@ -60,15 +74,98 @@ def construir_parser() -> argparse.ArgumentParser:
 
 def cmd_try(args) -> int:
     raiz = Path(args.projeto or os.getcwd())
-    piso, erro = carregar_do_projeto(raiz)
+    maquina, erro_maquina = carregar_da_maquina(home(), raiz)
+    repo, erro = carregar_do_projeto(raiz)
+    piso = combinar(maquina, repo)
     d = decidir(Entrada(args.texto, familia_de(args.modelo_atual), args.agente, mod_perfil.carregar(home()), piso))
     print(f"classe:      {d.classe.name.lower()} ({'com' if d.confianca else 'sem'} confiança)")
     print(f"risco:       {', '.join(sorted(r.value for r in d.riscos)) or 'nenhum'}")
     print(f"tier:        {d.tier.name.lower()}")
     print(f"modelo:      {d.familia_atual or 'desconhecido'} → {d.familia_escrita or 'sem mudança'}")
     print(f"motivos:     {' '.join(d.motivos)}")
-    if erro:
-        print(f"piso:        ignorado, inválido: {erro}")
+    for e in (erro_maquina, erro):
+        if e:
+            print(f"piso:        ignorado, inválido: {e}")
+    return 0
+
+
+def _ler_piso_maquina() -> dict:
+    caminho = mod_piso.caminho_maquina(home())
+    if not caminho.is_file():
+        return {"versao": mod_piso.VERSAO}
+    return json.loads(caminho.read_text(encoding="utf-8"))
+
+
+def _descrever_piso(bruto: dict, recuo: str = "") -> list[str]:
+    linhas = []
+    if "minimo" in bruto:
+        linhas.append(f"{recuo}mínimo geral: {bruto['minimo']}")
+    for campo, rotulo in (("minimo_por_classe", "por classe"), ("minimo_por_risco", "por risco")):
+        if isinstance(bruto.get(campo), dict) and bruto[campo]:
+            linhas.append(f"{recuo}{rotulo}: " + ", ".join(f"{k}={v}" for k, v in bruto[campo].items()))
+    return linhas or [f"{recuo}(vazio)"]
+
+
+def cmd_piso(args) -> int:
+    h = home()
+    caminho = mod_piso.caminho_maquina(h)
+    templates = mod_piso.templates()
+    if args.fonte is None:
+        print(f"arquivo:     {caminho} ({'existe' if caminho.is_file() else 'ausente'})")
+        try:
+            bruto = _ler_piso_maquina()
+            mod_piso.interpretar_maquina(bruto, str(caminho))
+        except (OSError, ValueError) as e:
+            print(f"piso:        inválido, ignorado pelo hook: {e}")
+            return 1
+        print("global:")
+        print("\n".join(_descrever_piso({k: v for k, v in bruto.items() if k != "por_projeto"}, "  ")))
+        for nome, sub in (bruto.get("por_projeto") or {}).items():
+            print(f"projeto {nome}:")
+            print("\n".join(_descrever_piso(sub, "  ")))
+        print(f"templates:   {', '.join(sorted(templates))}")
+        return 0
+    try:
+        bruto = _ler_piso_maquina()
+    except ValueError as e:
+        print(f"{caminho} não é um JSON válido ({e}); corrija ou apague antes de gravar", file=sys.stderr)
+        return 1
+    if args.fonte == "remover":
+        if args.projeto:
+            removido = (bruto.get("por_projeto") or {}).pop(args.projeto, None) is not None
+            if not bruto.get("por_projeto"):
+                bruto.pop("por_projeto", None)
+        else:
+            # Lista, não gerador: any() pararia no primeiro campo e deixaria os outros gravados.
+            removido = any([bruto.pop(k, None) is not None for k in ("minimo", "minimo_por_classe", "minimo_por_risco")])
+        if not removido:
+            print("nada a remover", file=sys.stderr)
+            return 2
+    else:
+        origem = templates.get(args.fonte) or Path(args.fonte)
+        if not origem.is_file():
+            print(f"fonte não encontrada: {args.fonte!r} (templates: {', '.join(sorted(templates))}, ou um caminho .json)", file=sys.stderr)
+            return 2
+        try:
+            mod_piso.carregar(origem)
+            dados = json.loads(origem.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            print(f"piso inválido: {e}", file=sys.stderr)
+            return 2
+        dados.pop("versao", None)
+        if args.projeto:
+            bruto.setdefault("por_projeto", {})[args.projeto] = dados
+        else:
+            for k in ("minimo", "minimo_por_classe", "minimo_por_risco"):
+                bruto.pop(k, None)
+            bruto.update(dados)
+    bruto["versao"] = mod_piso.VERSAO
+    try:
+        mod_piso.salvar_maquina(h, bruto)
+    except ValueError as e:
+        print(f"piso inválido: {e}", file=sys.stderr)
+        return 2
+    print(f"gravado em {caminho}; vale no próximo subagente")
     return 0
 
 
@@ -131,11 +228,16 @@ def cmd_doctor() -> int:
                 print(f"hook {evento}: {n}")
     except (OSError, ValueError, AttributeError):
         print(f"hooks:       {settings_path()} não lido")
+    maquina, erro_m = carregar_da_maquina(h, Path(os.getcwd()))
+    if erro_m:
+        print(f"piso:        da máquina inválido, ignorado: {erro_m}")
+    else:
+        print(f"piso:        da máquina {'ativo' if maquina else 'nenhum'} ({mod_piso.caminho_maquina(h)})")
     piso, erro = carregar_do_projeto(Path(os.getcwd()))
     if erro:
-        print(f"piso:        inválido, ignorado: {erro}")
-    else:
-        print(f"piso:        {'encontrado' if piso else 'nenhum'} a partir de {os.getcwd()}")
+        print(f"piso repo:   inválido, ignorado: {erro}")
+    elif piso:
+        print(f"piso repo:   encontrado a partir de {os.getcwd()}")
     return 0
 
 
@@ -153,6 +255,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_try(args)
     if args.comando == "economia":
         return cmd_economia(args)
+    if args.comando == "piso":
+        return cmd_piso(args)
     if args.comando == "stats":
         from datetime import datetime, timedelta, timezone
         from cakto_downshift.stats import formatar, resumo

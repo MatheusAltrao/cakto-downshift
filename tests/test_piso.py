@@ -5,10 +5,11 @@ from pathlib import Path
 import pytest
 
 from cakto_downshift.classes import Classe, Tier
-from cakto_downshift.piso import NOME_ARQUIVO, carregar, carregar_do_projeto, encontrar, tier_minimo
+from cakto_downshift.piso import (NOME_ARQUIVO, carregar, carregar_da_maquina, carregar_do_projeto, combinar,
+                                   encontrar, salvar_maquina, templates, tier_minimo)
 from cakto_downshift.vocabulario_risco import Categoria
 
-TEMPLATES = Path(__file__).parent.parent / "docs" / "pisos"
+TEMPLATES = Path(__file__).parent.parent / "src" / "cakto_downshift" / "pisos"
 
 
 @pytest.mark.parametrize("nome", ["pagamentos.json", "front.json"])
@@ -70,3 +71,47 @@ def test_so_sobe_e_o_maior_vence(tmp_path):
 
 def test_sem_arquivo(tmp_path):
     assert carregar_do_projeto(tmp_path) == (None, None)
+
+
+def test_templates_viajam_no_pacote():
+    assert set(templates()) == {"pagamentos", "front"}
+
+
+def test_combinar_fica_com_o_maior_em_cada_campo():
+    a = carregar(TEMPLATES / "front.json")
+    b = carregar(TEMPLATES / "pagamentos.json")
+    c = combinar(a, b)
+    assert tier_minimo(c, Classe.MECANICA, frozenset({Categoria.DINHEIRO})) == Tier.OPUS
+    assert tier_minimo(c, Classe.MECANICA, frozenset({Categoria.ACESSO})) == Tier.SONNET
+    assert combinar(a, None) is a and combinar(None, None) is None
+
+
+def test_piso_da_maquina_global_e_por_projeto(home, tmp_path):
+    salvar_maquina(home, {"versao": 1, "minimo_por_risco": {"dado_pessoal": "sonnet"},
+                          "por_projeto": {"cakto-backend": {"minimo_por_risco": {"dinheiro": "opus"}}}})
+    fora, _ = carregar_da_maquina(home, tmp_path / "outro")
+    assert tier_minimo(fora, Classe.MECANICA, frozenset({Categoria.DINHEIRO})) is None
+    assert tier_minimo(fora, Classe.MECANICA, frozenset({Categoria.DADO_PESSOAL})) == Tier.SONNET
+    # A sessão aberta numa subpasta do repo ainda pega o piso do projeto.
+    dentro, _ = carregar_da_maquina(home, tmp_path / "cakto-backend" / "apps" / "x")
+    assert tier_minimo(dentro, Classe.MECANICA, frozenset({Categoria.DINHEIRO})) == Tier.OPUS
+    assert tier_minimo(dentro, Classe.MECANICA, frozenset({Categoria.DADO_PESSOAL})) == Tier.SONNET
+    assert carregar_da_maquina(home, None)[0] is not None
+
+
+@pytest.mark.parametrize("bruto", [
+    {"versao": 1, "por_projeto": []}, {"versao": 1, "por_projeto": {"x": 1}},
+    {"versao": 1, "por_projeto": {"x": {"minimo": "turbo"}}}, {"versao": 1, "por_projeto": {"x": {"versao": 1}}},
+    {"versao": 2}, {"minimo": "opus"},
+])
+def test_salvar_maquina_recusa_invalido_e_hook_ignora(home, bruto):
+    with pytest.raises(ValueError):
+        salvar_maquina(home, bruto)
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "piso.json").write_text(json.dumps(bruto))
+    piso, erro = carregar_da_maquina(home, None)
+    assert piso is None and erro
+
+
+def test_piso_da_maquina_sem_arquivo(home):
+    assert carregar_da_maquina(home, Path("/tmp")) == (None, None)

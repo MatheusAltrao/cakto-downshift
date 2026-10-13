@@ -76,10 +76,10 @@ def test_low_nunca_escreve_haiku():
     assert decidir(e(RENAME, atual="sonnet", economia=Economia.LOW)).familia_escrita is None
 
 
-def test_piso_repo_sobe_e_marca():
+def test_piso_projeto_sobe_e_marca():
     piso = Piso(por_risco={Categoria.DINHEIRO: Tier.OPUS})
     d = decidir(e(RISCO, atual="sonnet", piso=piso))
-    assert d.familia_escrita == "opus" and d.piso_repo and "PISO_REPO" in d.motivos
+    assert d.familia_escrita == "opus" and d.piso_projeto and "PISO_PROJETO" in d.motivos
 
 
 def test_fora_da_lista_nao_escreve():

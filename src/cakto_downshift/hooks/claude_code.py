@@ -12,7 +12,7 @@ from cakto_downshift import escopo as mod_escopo
 from cakto_downshift import perfil as mod_perfil
 from cakto_downshift import telemetria
 from cakto_downshift.catalogo import custo_usd, familia_de, por_familia
-from cakto_downshift.piso import carregar_do_projeto
+from cakto_downshift.piso import carregar_da_maquina, carregar_do_projeto, combinar
 from cakto_downshift.politica import Entrada, decidir
 from cakto_downshift.transcript import modelo_da_sessao, modelo_do_transcript, uso_do_transcript
 
@@ -69,7 +69,8 @@ def pre_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
         raise ValueError("CAMPO_INVALIDO")
     agente = ti.get("subagent_type") or ""
     perfil = mod_perfil.carregar(home)
-    piso, _ = carregar_do_projeto(raiz) if raiz else (None, None)
+    # O piso da máquina é o principal; o arquivo no repo, quando existe, só soma por cima.
+    piso = combinar(carregar_da_maquina(home, raiz)[0], carregar_do_projeto(raiz)[0] if raiz else None)
     d = decidir(Entrada(
         texto=texto[:MAX_TEXTO_CLASSIFICADO], familia_atual=_modelo_atual(payload), agente=agente,
         perfil=perfil, piso=piso,
@@ -84,7 +85,7 @@ def pre_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
         "projeto": telemetria.nome_projeto(str(raiz) if raiz else None),
         "classe": d.classe.name.lower(), "confianca": d.confianca,
         "risco": sorted(r.value for r in d.riscos), "perfil": perfil.economia.value,
-        "piso_repo": d.piso_repo, "piso_perfil": d.piso_perfil,
+        "piso_projeto": d.piso_projeto, "piso_perfil": d.piso_perfil,
         "tier": d.tier.name.lower(), "familia_atual": d.familia_atual, "familia_escrita": d.familia_escrita,
         "motivos": list(d.motivos), "ms": round((time.perf_counter() - inicio) * 1000, 1),
     })

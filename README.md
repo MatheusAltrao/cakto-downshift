@@ -51,16 +51,30 @@ desconhecida, vale o teto. O número chega à sessão como contexto no `SessionS
 e a orientação de agrupar tarefas pequenas. **É orientação, não trava**: um hook vê um spawn por vez
 e não decide quantos filhos o modelo abre.
 
-## Piso por repositório
+## Piso por máquina
 
-Um `cakto-downshift.json` na raiz do repo (procurado de baixo para cima, até 8 níveis) define o
-tier mínimo por classe ou por categoria de risco. Só sobe: nunca rebaixa. Arquivo inválido é
-ignorado e o `doctor` avisa. Dois templates prontos em `docs/pisos/`:
+O piso é um tier mínimo por classe ou por categoria de risco, e mora na **sua máquina**, em
+`~/.cakto-downshift/piso.json`: nada precisa entrar em repositório nenhum. Só sobe: nunca rebaixa.
+Tem um bloco global e, opcionalmente, um por **nome da pasta** do repositório (a sessão aberta numa
+subpasta ainda casa). Arquivo inválido é ignorado pelo hook e o `doctor` avisa.
 
-- `pagamentos.json`: dinheiro, segredo, cripto e destrutivo em opus. Para `cakto-backend` e `cakto-split`.
-- `front.json`: segredo e destrutivo em opus; dinheiro, acesso, dado pessoal, cripto e manipulação no
+```bash
+cakto-downshift piso                                     # mostra o que está gravado
+cakto-downshift piso front                               # template front como piso global
+cakto-downshift piso pagamentos --projeto cakto-backend  # template pagamentos só no cakto-backend
+cakto-downshift piso ./meu.json --projeto split-admin    # um JSON seu, no mesmo formato
+cakto-downshift piso remover [--projeto X]
+```
+
+Dois templates viajam no pacote:
+
+- `pagamentos`: dinheiro, segredo, cripto e destrutivo em opus. Para `cakto-backend` e `cakto-split`.
+- `front`: segredo e destrutivo em opus; dinheiro, acesso, dado pessoal, cripto e manipulação no
   mínimo sonnet. Para `cakto-frontend`, `cakto-checkout`, `cakto-checkout-v2`, `split-admin` e upsell
   (no checkout quase todo componente cita pix ou cartão; com dinheiro em opus nada sairia dali).
+
+Um `cakto-downshift.json` na raiz do repo (procurado até 8 níveis acima) também é aceito, como extra:
+quando os dois existem, vale o maior em cada campo.
 
 ## Risco
 

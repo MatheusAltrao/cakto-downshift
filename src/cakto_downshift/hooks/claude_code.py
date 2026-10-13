@@ -115,7 +115,7 @@ def subagent_stop(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
     custo = custo_usd(modelo, uso.entrada, uso.saida, uso.cache_leitura, uso.cache_escrita) if (modelo and uso) else None
     telemetria.gravar(home, {
         "tipo": "uso", "sessao": telemetria.hash_sessao(payload.get("session_id")),
-        "agent_id": payload.get("agent_id"), "modelo": familia,
+        "agent_id": payload["agent_id"] if isinstance(payload.get("agent_id"), str) else None, "modelo": familia,
         "entrada": uso.entrada if uso else 0, "saida": uso.saida if uso else 0,
         "cache_leitura": uso.cache_leitura if uso else 0, "cache_escrita": uso.cache_escrita if uso else 0,
         "custo_usd": round(custo, 6) if custo is not None else None,
@@ -132,7 +132,8 @@ def post_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
     reportado = familia_de(resposta.get("model")) if isinstance(resposta, dict) else None
     telemetria.gravar(home, {
         "tipo": "resultado", "sessao": telemetria.hash_sessao(payload.get("session_id")),
-        "tool_use_id": payload.get("tool_use_id"), "modelo_reportado": reportado,
+        "tool_use_id": payload["tool_use_id"] if isinstance(payload.get("tool_use_id"), str) else None,
+        "modelo_reportado": reportado,
         "status": "erro" if payload.get("hook_event_name") == "PostToolUseFailure" else "concluido",
     })
     return {}

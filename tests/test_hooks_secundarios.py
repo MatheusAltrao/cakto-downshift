@@ -43,3 +43,15 @@ def test_post_tool_use_grava_resultado(home):
     assert evs[1]["modelo_reportado"] is None and evs[1]["status"] == "erro"
     post_tool_use({**base, "tool_name": "Bash"}, home, {})
     assert len([e for e in ler(home) if e["tipo"] == "resultado"]) == 2
+
+
+def test_subagent_stop_tolera_tipos_errados(home, tmp_path):
+    subagent_stop({"session_id": "s", "agent_id": {"x": 1}, "agent_transcript_path": str(tmp_path), "cwd": "/tmp/p"}, home, {})
+    ev = ler(home)[-1]
+    assert ev["agent_id"] is None and ev["entrada"] == 0 and ev["saida"] == 0 and ev["modelo"] is None
+
+
+def test_post_tool_use_ignora_tool_use_id_nao_string(home):
+    post_tool_use({"session_id": "s", "tool_use_id": 7, "cwd": "/tmp/p", "tool_name": "Task",
+                   "hook_event_name": "PostToolUse"}, home, {})
+    assert ler(home)[-1]["tool_use_id"] is None

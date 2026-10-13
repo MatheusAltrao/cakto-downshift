@@ -490,7 +490,7 @@ def custo_usd(m: Modelo, entrada: int, saida: int, cache_leitura: int = 0, cache
 {"texto": "faça a migração do banco de pedidos para o novo schema sem downtime", "classe": "complexa", "confianca": true}
 {"texto": "existe uma race condition entre o worker e o webhook; encontre a causa raiz", "classe": "complexa", "confianca": true}
 {"texto": "design a distributed cache invalidation strategy across the three services", "classe": "complexa", "confianca": true}
-{"texto": "revise a segurança do endpoint de upload", "classe": "complexa", "confianca": true}
+{"texto": "revise a segurança do endpoint de upload", "classe": "complexa", "confianca": false}
 {"texto": "dê uma olhada no módulo de onboarding e me diga o que acha", "classe": "media", "confianca": false}
 {"texto": "veja o arquivo src/app.py", "classe": "media", "confianca": false}
 ```
@@ -849,8 +849,11 @@ _CONTEXTO = {c: tuple(re.compile(p) for p in ps) for c, ps in CONTEXTO.items()}
 
 
 def _tem_contexto_perto(texto: str, inicio: int, fim: int, contextos) -> bool:
-    janela = texto[max(0, inicio - DISTANCIA_CONTEXTO): fim + DISTANCIA_CONTEXTO]
-    return any(r.search(janela) for r in contextos)
+    # Janelas à esquerda e à direita, sem o próprio substantivo: "cobranças" não pode ser o
+    # contexto de "cobranças".
+    esquerda = texto[max(0, inicio - DISTANCIA_CONTEXTO): inicio]
+    direita = texto[fim: fim + DISTANCIA_CONTEXTO]
+    return any(r.search(esquerda) or r.search(direita) for r in contextos)
 
 
 def categorias(texto_normalizado: str) -> frozenset[Categoria]:

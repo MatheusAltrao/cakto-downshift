@@ -1,0 +1,16 @@
+{"texto": "ajuste o espaçamento do card de saldo no dashboard"}
+{"texto": "renomeie a variável saldoTotal"}
+{"texto": "mude a cor do ícone do pix no footer"}
+{"texto": "rename the PixButton component"}
+{"texto": "adicione o logo do paypal na página"}
+{"texto": "corrija o typo em cobranças na tela"}
+{"texto": "atualize a doc sobre a recorrência de assinaturas"}
+{"texto": "remova as colunas vazias do CSV de exemplo"}
+{"texto": "remova a classe css das colunas do grid"}
+{"texto": "exclua a coluna de telefone da tabela de exibição"}
+{"texto": "limpar o cache e reorganizar as colunas da tabela no front"}
+{"texto": "excluir o arquivo tabelas.md"}
+{"texto": "o componente é exclusivo da página de obrigado"}
+{"texto": "edite src/auth/session.ts e corrija o typo no comentário"}
+{"texto": "write a unit test for the date formatter"}
+{"texto": "isso é simples de explicar: o hook roda antes do render"}

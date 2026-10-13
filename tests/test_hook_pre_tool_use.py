@@ -70,3 +70,23 @@ def test_piso_do_repo_e_aplicado(home, tmp_path):
 @pytest.mark.parametrize("p", [{}, {"tool_input": {}}, {"tool_input": {"prompt": ""}}, {"tool_input": "nao e dict"}])
 def test_payload_sem_tarefa_responde_vazio(home, p):
     assert pre_tool_use(p, home, {}) == {}
+
+
+def test_subagent_type_nao_string_e_payload_invalido(home):
+    with pytest.raises(ValueError, match="CAMPO_INVALIDO"):
+        pre_tool_use(payload("renomeie a variável userId", agente={"a": 1}), home, {})
+
+
+def test_session_id_nao_string_nao_impede_a_decisao(home):
+    p = payload("renomeie a variável userId para customerId")
+    p["session_id"] = 5
+    p["tool_use_id"] = 7
+    r = pre_tool_use(p, home, {})
+    assert r["hookSpecificOutput"]["updatedInput"]["model"] == "haiku"
+    ev = ler(home)[-1]
+    assert ev["sessao"] is None and ev["tool_use_id"] is None
+
+
+def test_agente_nomeado_com_modelo_na_chamada_e_roteado(home):
+    r = pre_tool_use(payload("renomeie a variável userId", agente="backend"), home, {})
+    assert r["hookSpecificOutput"]["updatedInput"]["model"] == "haiku"

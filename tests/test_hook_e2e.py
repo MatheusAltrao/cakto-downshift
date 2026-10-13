@@ -53,3 +53,19 @@ def test_latencia(home):
     inicio = time.perf_counter()
     pre_tool_use(grande, home, {})
     assert time.perf_counter() - inicio < 0.5
+
+
+def test_stdout_fechado_nao_derruba_o_hook(home):
+    p = {"session_id": "s", "cwd": "/tmp/p", "tool_input": {"prompt": "renomeie a variável userId", "model": "claude-opus-5-5"}}
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(0.5); import sys; from cakto_downshift.cli import main; sys.exit(main(['hook','pre-tool-use']))"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env={"CAKTO_DOWNSHIFT_HOME": str(home), "PATH": "/usr/bin:/bin"},
+    )
+    proc.stdout.close()
+    proc.stdin.write(json.dumps(p).encode())
+    proc.stdin.close()
+    err = proc.stderr.read()
+    proc.stderr.close()
+    assert proc.wait(timeout=10) == 0
+    assert b"Traceback" not in err

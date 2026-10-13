@@ -1,6 +1,8 @@
 """Os hooks do Claude Code. Cada função recebe o payload já decodificado e devolve o dict de
 resposta. `executar` é a borda: stdin, stdout, e a regra de que nada aqui derruba um spawn."""
 import json
+import os
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -59,7 +61,9 @@ def pre_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
     if texto is None:
         return {}
     ti = payload["tool_input"]
-    agente = ti.get("subagent_type") if isinstance(ti.get("subagent_type"), str) else ""
+    if "subagent_type" in ti and not isinstance(ti["subagent_type"], str):
+        raise ValueError("CAMPO_INVALIDO")
+    agente = ti.get("subagent_type") or ""
     perfil = mod_perfil.carregar(home)
     piso, _ = carregar_do_projeto(raiz) if raiz else (None, None)
     d = decidir(Entrada(
@@ -71,7 +75,7 @@ def pre_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
     telemetria.gravar(home, {
         "tipo": "decisao",
         "sessao": telemetria.hash_sessao(payload.get("session_id")),
-        "tool_use_id": payload.get("tool_use_id"),
+        "tool_use_id": payload["tool_use_id"] if isinstance(payload.get("tool_use_id"), str) else None,
         "agente": agente or "general-purpose",
         "projeto": telemetria.nome_projeto(str(raiz) if raiz else None),
         "classe": d.classe.name.lower(), "confianca": d.confianca,
@@ -107,9 +111,10 @@ _HOOKS = {"pre-tool-use": pre_tool_use, "session-start": session_start,
 
 def executar(nome: str, entrada: IO[bytes], saida: IO[str], env: Mapping[str, str]) -> int:
     """Sempre exit 0 e sempre JSON na saída: um erro nosso nunca pode virar um spawn bloqueado."""
-    home = home_de(env)
+    home: Path | None = None
     resposta: dict = {}
     try:
+        home = home_de(env)
         bruto = entrada.read(MAX_BYTES + 1)
         if len(bruto) > MAX_BYTES:
             raise ValueError("PAYLOAD_GRANDE")
@@ -122,8 +127,16 @@ def executar(nome: str, entrada: IO[bytes], saida: IO[str], env: Mapping[str, st
         resposta = funcao(payload, home, env)
     except Exception as e:  # noqa: BLE001 — fail-open é o contrato deste ponto
         codigo = str(e) if isinstance(e, ValueError) and str(e).isupper() else type(e).__name__
-        telemetria.gravar(home, {"tipo": "falha", "hook": nome, "codigo": codigo})
+        if home is not None:
+            telemetria.gravar(home, {"tipo": "falha", "hook": nome, "codigo": codigo})
         resposta = {}
-    saida.write(json.dumps(resposta, ensure_ascii=False) + "\n")
-    saida.flush()
+    try:
+        saida.write(json.dumps(resposta, ensure_ascii=False) + "\n")
+        saida.flush()
+    except (OSError, ValueError):
+        # Pipe fechado: sem desviar o fd 1, o flush do shutdown do interpretador falha de novo (exit 120).
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
     return 0

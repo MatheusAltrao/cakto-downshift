@@ -9,8 +9,9 @@ from pathlib import Path
 ARQUIVO = "eventos.jsonl"
 
 
-def hash_sessao(session_id: str | None) -> str | None:
-    if not session_id:
+def hash_sessao(session_id: object) -> str | None:
+    # Payload vem de fora: qualquer coisa que não seja str não vazia vira ausência, não exceção.
+    if not isinstance(session_id, str) or not session_id:
         return None
     return hashlib.sha256(session_id.encode()).hexdigest()[:16]
 

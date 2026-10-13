@@ -51,3 +51,46 @@ def test_aplicar_cria_settings_e_perfil_quando_nao_existem(home, tmp_path):
     assert json.loads(perfil_path(home).read_text())["economia"] == "medium"
     desinstalar(s)
     assert json.loads(s.read_text()).get("hooks", {}) == {}
+
+
+def test_dois_aplicar_no_mesmo_segundo_mantem_o_backup_original(home, tmp_path):
+    s = tmp_path / "settings.json"
+    original = json.dumps({"model": "opus"})
+    s.write_text(original)
+    aplicar(s, home, None, EXE)
+    aplicar(s, home, None, EXE)
+    baks = sorted(tmp_path.glob("settings.json.bak-*"))
+    assert len(baks) == 2
+    assert any(b.read_text() == original for b in baks)
+
+
+def test_grupo_sem_hooks_sobrevive(home):
+    s = {"hooks": {"Stop": [{"matcher": "x"}, {"matcher": "y", "hooks": []}]}}
+    assert mesclar(s, EXE)["hooks"]["Stop"] == s["hooks"]["Stop"]
+    assert remover(s) == s
+
+
+def test_aplicar_via_symlink_mantem_link_e_modo_600(home, tmp_path):
+    real = tmp_path / "dot" / "settings.json"
+    real.parent.mkdir()
+    real.write_text("{}")
+    os.chmod(real, 0o600)
+    link = tmp_path / "settings.json"
+    os.symlink(real, link)
+    aplicar(link, home, None, EXE)
+    assert link.is_symlink()
+    assert "SessionStart" in json.loads(real.read_text())["hooks"]
+    assert oct(real.stat().st_mode & 0o777) == "0o600"
+    assert not [p for p in real.parent.iterdir() if p.name.startswith(".settings.json.")]
+
+
+def test_json_invalido_da_rc1_sem_tocar_em_nada(home, tmp_path, monkeypatch, capsys):
+    from cakto_downshift.cli import main
+    s = tmp_path / "settings.json"
+    s.write_bytes(b'{"model":"opus",}')
+    monkeypatch.setenv("CAKTO_DOWNSHIFT_SETTINGS", str(s))
+    assert main(["instalar", "--aplicar"]) == 1
+    assert "não é um JSON válido" in capsys.readouterr().err
+    assert s.read_bytes() == b'{"model":"opus",}'
+    assert not list(tmp_path.glob("settings.json.bak-*"))
+    assert not perfil_path(home).exists()

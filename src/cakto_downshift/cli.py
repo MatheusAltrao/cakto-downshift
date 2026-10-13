@@ -44,6 +44,9 @@ def construir_parser() -> argparse.ArgumentParser:
                        formatter_class=argparse.RawDescriptionHelpFormatter)
     e.add_argument("args", nargs="*")
 
+    st = sub.add_parser("stats", help="decisões, usos e economia estimada")
+    st.add_argument("--dias", type=int, default=7)
+
     sub.add_parser("doctor", help="estado da instalação")
     return parser
 
@@ -142,6 +145,13 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_try(args)
     if args.comando == "economia":
         return cmd_economia(args)
+    if args.comando == "stats":
+        from datetime import datetime, timedelta, timezone
+        from cakto_downshift.stats import formatar, resumo
+        from cakto_downshift.telemetria import ler
+        desde = datetime.now(timezone.utc) - timedelta(days=args.dias)
+        print(formatar(resumo(ler(home(), desde)), args.dias))
+        return 0
     if args.comando == "doctor":
         return cmd_doctor()
     parser.print_help()

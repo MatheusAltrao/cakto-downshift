@@ -1,9 +1,7 @@
-import pytest
-
 from cakto_downshift.classes import Classe, Tier
 from cakto_downshift.perfil import Economia, Perfil
 from cakto_downshift.piso import Piso
-from cakto_downshift.politica import Decisao, Entrada, decidir
+from cakto_downshift.politica import Entrada, decidir
 from cakto_downshift.vocabulario_risco import Categoria
 
 RENAME = "renomeie a variável userId para customerId"
@@ -33,6 +31,7 @@ def test_sem_sinal_em_medium_fica():
 def test_sem_sinal_em_high_desce_um_degrau():
     d = decidir(e(SEM_SINAL, economia=Economia.HIGH))
     assert d.familia_escrita == "sonnet" and "PERFIL_HIGH" in d.motivos
+    assert d.tier == Tier.SONNET
 
 
 def test_high_nunca_escreve_haiku_sem_confianca():
@@ -95,3 +94,28 @@ def test_motivos_nao_carregam_texto():
     d = decidir(e(RENAME))
     assert all(m.isupper() or "_" in m for m in d.motivos)
     assert not any("userId" in m for m in d.motivos)
+
+
+def test_complexa_confiante_nunca_rebaixa_de_fable_em_nenhum_perfil():
+    modelos = ("haiku", "sonnet", "opus", "fable")
+    for economia in Economia:
+        p = Perfil(economia=economia, modelos=modelos)
+        d = decidir(Entrada(COMPLEXA, "fable", "general-purpose", p))
+        assert d.classe == Classe.COMPLEXA and d.confianca
+        assert d.familia_escrita is None and "GUARDA_COMPLEXA" in d.motivos
+
+
+def test_sem_confianca_nao_sobe_de_haiku():
+    d = decidir(e(SEM_SINAL, atual="haiku"))
+    assert d.familia_escrita is None and "GUARDA_SEM_CONFIANCA" in d.motivos
+
+
+def test_piso_do_perfil_low_nao_destrava_subida_sem_confianca():
+    d = decidir(e("escreva uma função " + "bem documentada e clara " * 15, atual="haiku", economia=Economia.LOW))
+    assert d.classe <= Classe.SIMPLES and not d.confianca
+    assert d.familia_escrita is None and "GUARDA_SEM_CONFIANCA" in d.motivos
+
+
+def test_modelo_na_chamada_libera_agente_nomeado():
+    d = decidir(e(RENAME, agente="seguranca", modelo_na_chamada=True))
+    assert d.familia_escrita == "haiku"

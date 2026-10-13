@@ -24,6 +24,8 @@ class Entrada:
     perfil: Perfil
     piso: Piso | None = None
     rotear_nomeados: bool = False
+    # O pai escolheu o modelo na própria chamada Task: vale como em general-purpose.
+    modelo_na_chamada: bool = False
 
 
 @dataclass(frozen=True)
@@ -68,28 +70,31 @@ def decidir(e: Entrada) -> Decisao:
         tier, piso_perfil = Tier.SONNET, True
         motivos.append("PISO_PERFIL")
 
-    escrita = _guardas(e, cls.classe, confianca, riscos, tier, piso_repo, motivos)
+    escrita, tier = _guardas(e, cls.classe, confianca, riscos, tier, piso_repo, motivos)
     return Decisao(cls.classe, confianca, riscos, tier, e.familia_atual, escrita, tuple(motivos), piso_perfil, piso_repo, cls.sem_sinal)
 
 
-def _guardas(e: Entrada, classe: Classe, confianca: bool, riscos, tier: Tier, piso_repo: bool, motivos: list[str]) -> str | None:
-    """Devolve a família a escrever, ou None. Cada None vem com o motivo."""
-    if (e.agente or "") not in AGENTES_QUE_HERDAM and not e.rotear_nomeados:
+def _guardas(e: Entrada, classe: Classe, confianca: bool, riscos, tier: Tier, piso_repo: bool, motivos: list[str]) -> tuple[str | None, Tier]:
+    """Devolve (família a escrever ou None, tier efetivo). Cada None vem com o motivo.
+
+    O tier efetivo difere do pedido só no degrau PERFIL_HIGH; devolvê-lo mantém a telemetria por tier fiel ao que foi escrito.
+    """
+    if (e.agente or "") not in AGENTES_QUE_HERDAM and not e.rotear_nomeados and not e.modelo_na_chamada:
         motivos.append("GUARDA_AGENTE_NOMEADO")
-        return None
+        return None, tier
     atual = FAMILIA_TIER.get(e.familia_atual or "")
     if atual is None:
         motivos.append("GUARDA_MODELO_DESCONHECIDO")
-        return None
+        return None, tier
     if tier == atual:
-        return None
+        return None, tier
     if tier < atual:
         if classe == Classe.COMPLEXA:
             motivos.append("GUARDA_COMPLEXA")
-            return None
+            return None, tier
         if riscos:
             motivos.append("GUARDA_RISCO")
-            return None
+            return None, tier
         if not confianca:
             # O único degrau sem confiança: opus → sonnet no perfil high, sem risco e sem complexa.
             if e.perfil.economia == Economia.HIGH and atual == Tier.OPUS:
@@ -97,12 +102,12 @@ def _guardas(e: Entrada, classe: Classe, confianca: bool, riscos, tier: Tier, pi
                 motivos.append("PERFIL_HIGH")
             else:
                 motivos.append("GUARDA_SEM_CONFIANCA")
-                return None
+                return None, tier
     elif not (confianca or piso_repo or riscos):
         motivos.append("GUARDA_SEM_CONFIANCA")
-        return None
+        return None, tier
     familia = TIER_FAMILIA[tier]
     if familia not in e.perfil.modelos:
         motivos.append("GUARDA_FORA_DA_LISTA")
-        return None
-    return familia
+        return None, tier
+    return familia, tier

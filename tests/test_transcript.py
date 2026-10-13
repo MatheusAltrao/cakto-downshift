@@ -63,22 +63,28 @@ def test_linha_json_que_nao_e_objeto_e_ignorada(tmp_path):
 
 
 def test_separador_unicode_dentro_de_string_nao_quebra_a_linha(tmp_path):
+    # Linha escrita à mão: json.dumps (ensure_ascii=True) escaparia o U+2028 e o arquivo
+    # não teria o caractere cru. Aqui o   da fonte Python vira o caractere real na string.
     t = tmp_path / "u.jsonl"
-    t.write_text(linha("assistant", "claude-haiku-5-5", {"input_tokens": 9, "output_tokens": 0}).replace(
-        '"role": "assistant"', '"role": "assistant", "content": "a bc\\u000bd"') + "\n")
-    assert uso_do_transcript(t) == Uso(9, 0, 0, 0)
+    linha_crua = ('{"type": "assistant", "message": {"model": "claude-haiku-5-5", '
+                  '"content": "a b", "usage": {"input_tokens": 5, "output_tokens": 1}}}')
+    assert " " in linha_crua
+    t.write_text(linha_crua + "\n", encoding="utf-8")
+    assert uso_do_transcript(t) == Uso(5, 1, 0, 0)
 
 
-def test_modelo_da_sessao_com_cauda_cortada_no_meio_de_linha(tmp_path, monkeypatch):
+def test_modelo_da_sessao_com_cauda_cortada_dentro_de_linha_assistant(tmp_path, monkeypatch):
     import cakto_downshift.transcript as tr
-    # A cauda (150 B) cai no meio do preenchimento, nunca dentro da linha do opus.
-    monkeypatch.setattr(tr, "CAUDA_BYTES", 150)
+    # X é uma linha assistant longa e a cauda começa no meio dela, em '"assistant"': o
+    # fragmento é JSON inválido e tem de ser descartado sem exceção. Y é a última resposta.
+    x = ('{"type": "assistant", "message": {"model": "claude-sonnet-5-5", '
+         '"content": "' + "x" * 200 + '"}}\n')
+    y = linha("assistant", "claude-opus-5-5") + "\n"
+    arquivo = x + y
+    pos = x.index('"assistant"')
+    monkeypatch.setattr(tr, "CAUDA_BYTES", len(arquivo) - pos)
     t = tmp_path / "c.jsonl"
-    t.write_text("\n".join([
-        linha("assistant", "claude-sonnet-5-5"),
-        linha("user") + " " * 200,
-        linha("assistant", "claude-opus-5-5"),
-    ]))
+    t.write_text(arquivo, encoding="utf-8")
     assert modelo_da_sessao(t) == "claude-opus-5-5"
 
 

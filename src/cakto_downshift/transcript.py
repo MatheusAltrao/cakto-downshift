@@ -61,7 +61,8 @@ def _inteiro(valor) -> int:
         return 0
     try:
         return int(valor)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: JSON aceita Infinity, e int(float('inf')) levanta isso.
         return 0
 
 

@@ -1,5 +1,6 @@
 """Linha de comando. Os subcomandos entram nas tasks seguintes."""
 import argparse
+import os
 import sys
 
 from cakto_downshift import __version__
@@ -8,7 +9,9 @@ from cakto_downshift import __version__
 def construir_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cakto-downshift")
     parser.add_argument("--version", action="version", version=f"cakto-downshift {__version__}")
-    parser.add_subparsers(dest="comando")
+    sub = parser.add_subparsers(dest="comando")
+    hook = sub.add_parser("hook", help="executa um hook do Claude Code lendo o JSON do stdin")
+    hook.add_argument("nome")
     return parser
 
 
@@ -23,6 +26,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando is None:
         parser.print_help()
         return 2
+    if args.comando == "hook":
+        from cakto_downshift.hooks.claude_code import executar
+        return executar(args.nome, sys.stdin.buffer, sys.stdout, os.environ)
     return 0
 
 

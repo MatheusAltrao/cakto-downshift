@@ -1,0 +1,9 @@
+{
+  "versao": 1,
+  "minimo": "haiku",
+  "minimo_por_classe": {"complexa": "opus"},
+  "minimo_por_risco": {
+    "segredo": "opus", "destrutivo": "opus",
+    "dinheiro": "sonnet", "acesso": "sonnet", "dado_pessoal": "sonnet", "cripto": "sonnet", "manipulacao": "sonnet"
+  }
+}

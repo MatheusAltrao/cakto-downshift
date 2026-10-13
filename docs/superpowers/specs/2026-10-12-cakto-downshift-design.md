@@ -7,8 +7,7 @@ Data: 2026-10-12. Autor: Matheus Altrao. Status: aprovado em conversa, aguardand
 Um hook do Claude Code que troca o modelo de cada subagente pelo menor que dá conta da tarefa, sem
 chamar LLM nenhum para decidir. A sessão principal não muda. Na dúvida, o spawn segue como estava.
 
-O brain pensa; este economiza. Projeto da Cakto, escrito do zero em Python. O [downshift](https://github.com/tiagovilasboas/downshift)
-do Tiago Vilas Boas foi a inspiração e serve de leitura; nenhuma linha dele entra aqui.
+O brain pensa; este economiza. Projeto da Cakto, escrito do zero em Python.
 
 ## 2. Por que existe
 

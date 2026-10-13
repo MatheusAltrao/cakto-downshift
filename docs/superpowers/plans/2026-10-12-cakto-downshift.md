@@ -22,7 +22,6 @@
 - Código, nomes de função e comentários em PT-BR sem acento nos identificadores (`classificar`, `decidir`, `piso_repo`); docs em PT-BR com acento.
 - Comentário diz o porquê, nunca parafraseia o código.
 - Commits pequenos, mensagem em PT-BR, prefixo `feat|fix|test|docs|chore`.
-- Nenhuma linha copiada do projeto downshift do Tiago Vilas Boas; ele serve só de leitura em `../_referencia/downshift-leitura`.
 
 ---
 
@@ -2909,7 +2908,7 @@ Em `cli.py`: parsers `instalar` (`--escopo`, `--aplicar`) e `desinstalar` (`--ap
 - Modify: `README.md`
 - Create: `docs/agentes.md`
 
-- [ ] **Step 1: README em PT-BR** cobrindo: o que é (3 linhas), instalar (bootstrap do spec §12), os três perfis (tabela do spec §8), piso por repositório (templates em `docs/pisos/`), o que a telemetria grava e o que nunca grava, como ler o `stats` (e a frase "estimado pelo catálogo, não é fatura"), limitações conhecidas (o `allow` nos spawns reescritos; agente nomeado fora do roteador por padrão; ligação de custo por ordem), e a nota de origem: "Inspirado no downshift de Tiago Vilas Boas (Apache 2.0), lido e não copiado; este projeto é escrito do zero para a Cakto."
+- [ ] **Step 1: README em PT-BR** cobrindo: o que é (3 linhas), instalar (bootstrap do spec §12), os três perfis (tabela do spec §8), piso por repositório (templates em `docs/pisos/`), o que a telemetria grava e o que nunca grava, como ler o `stats` (e a frase "estimado pelo catálogo, não é fatura"), limitações conhecidas (o `allow` nos spawns reescritos; agente nomeado fora do roteador por padrão; ligação de custo por ordem).
 
 - [ ] **Step 2: `docs/agentes.md`** com a tabela de `model:` sugerida por agente (seguranca/backend/revisor-frontend em opus; design-frontend/teste-*/browser em sonnet) e o aviso de que, sem `model:`, o agente nomeado herda o Opus e o roteador não o toca.
 

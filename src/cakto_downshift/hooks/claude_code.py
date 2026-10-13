@@ -11,10 +11,10 @@ from typing import IO
 from cakto_downshift import escopo as mod_escopo
 from cakto_downshift import perfil as mod_perfil
 from cakto_downshift import telemetria
-from cakto_downshift.catalogo import familia_de
+from cakto_downshift.catalogo import custo_usd, familia_de, por_familia
 from cakto_downshift.piso import carregar_do_projeto
 from cakto_downshift.politica import Entrada, decidir
-from cakto_downshift.transcript import modelo_da_sessao
+from cakto_downshift.transcript import modelo_da_sessao, modelo_do_transcript, uso_do_transcript
 
 MAX_BYTES = 1024 * 1024
 NOMES = ("pre-tool-use", "session-start", "subagent-stop", "post-tool-use")
@@ -94,14 +94,47 @@ def pre_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
 
 
 def session_start(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
-    return {}
+    if not mod_escopo.dentro(raiz_do_projeto(payload, env), mod_escopo.carregar(home)):
+        return {}
+    perfil = mod_perfil.carregar(home)
+    orc = mod_perfil.orcamento(perfil, mod_perfil.ram_disponivel_gb())
+    telemetria.gravar(home, {"tipo": "sessao", "sessao": telemetria.hash_sessao(payload.get("session_id")),
+                             "orcamento": orc.maximo, "motivo": orc.motivo, "perfil": perfil.economia.value})
+    # Um hook vê um spawn por vez e não decide quantos o modelo abre: o limite só pode ser contexto.
+    return {"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                   "additionalContext": mod_perfil.orientacao(orc, perfil.economia)}}
 
 
 def subagent_stop(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
+    if not mod_escopo.dentro(raiz_do_projeto(payload, env), mod_escopo.carregar(home)):
+        return {}
+    caminho = payload.get("agent_transcript_path")
+    uso = uso_do_transcript(Path(caminho)) if isinstance(caminho, str) else None
+    familia = familia_de(modelo_do_transcript(Path(caminho))) if isinstance(caminho, str) else None
+    modelo = por_familia(familia) if familia else None
+    custo = custo_usd(modelo, uso.entrada, uso.saida, uso.cache_leitura, uso.cache_escrita) if (modelo and uso) else None
+    telemetria.gravar(home, {
+        "tipo": "uso", "sessao": telemetria.hash_sessao(payload.get("session_id")),
+        "agent_id": payload.get("agent_id"), "modelo": familia,
+        "entrada": uso.entrada if uso else 0, "saida": uso.saida if uso else 0,
+        "cache_leitura": uso.cache_leitura if uso else 0, "cache_escrita": uso.cache_escrita if uso else 0,
+        "custo_usd": round(custo, 6) if custo is not None else None,
+    })
     return {}
 
 
 def post_tool_use(payload: dict, home: Path, env: Mapping[str, str]) -> dict:
+    if payload.get("tool_name") not in ("Task", "Agent"):
+        return {}
+    if not mod_escopo.dentro(raiz_do_projeto(payload, env), mod_escopo.carregar(home)):
+        return {}
+    resposta = payload.get("tool_response")
+    reportado = familia_de(resposta.get("model")) if isinstance(resposta, dict) else None
+    telemetria.gravar(home, {
+        "tipo": "resultado", "sessao": telemetria.hash_sessao(payload.get("session_id")),
+        "tool_use_id": payload.get("tool_use_id"), "modelo_reportado": reportado,
+        "status": "erro" if payload.get("hook_event_name") == "PostToolUseFailure" else "concluido",
+    })
     return {}
 
 

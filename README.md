@@ -108,7 +108,3 @@ de afirmar economia.
   transcript é cumulativo, então o `stats` conta só o último uso de cada agente na sessão.
 - **Só os primeiros 16 KiB** do texto da tarefa são classificados.
 - Só Claude Code; fail-open: qualquer falha do hook responde `{}` com exit 0 e grava um evento `falha`.
-
-## Origem
-
-Inspirado no downshift de Tiago Vilas Boas (Apache 2.0), lido e não copiado; este projeto é escrito do zero para a Cakto.
